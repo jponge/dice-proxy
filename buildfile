@@ -13,7 +13,7 @@ define 'finagle-test' do
   project.version = '0.1'
   
   package :jar
-  manifest['Main-Class'] = 'my.app.MyApp'
+  manifest['Main-Class'] = 'dice.searchengine.httpproxy.SearchEngineHttpProxy'
   
   compile.with transitive(FINAGLE), transitive(CASBAH)
 end

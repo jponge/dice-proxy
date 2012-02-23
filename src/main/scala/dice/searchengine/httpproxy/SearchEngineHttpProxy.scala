@@ -1,4 +1,4 @@
-package my.app
+package dice.searchengine.httpproxy
 
 import com.twitter.finagle.{Service, SimpleFilter}
 import org.jboss.netty.handler.codec.http._
@@ -13,28 +13,38 @@ import scala.util.matching.Regex
 import com.twitter.finagle.http.Http
 import org.joda.time.DateTime
 
-object MyApp {
+/**
+ * A HTTP Proxy server based on Twitter Finagle that detects common search
+ * engine requests, and stores the extracted queries into a MongoDB database.
+ *
+ * @author Julien Ponge - julien.ponge@insa-lyon.fr
+ */
+object SearchEngineHttpProxy {
 
+  /**
+   * A filter for handling exceptions.
+   */
   class HandleExceptions extends SimpleFilter[HttpRequest, HttpResponse] {
 
     def apply(request: HttpRequest, service: Service[HttpRequest, HttpResponse]) = {
 
-      // `handle` asynchronously handles exceptions.
-      service(request) handle { case error =>
-        val statusCode = error match {
-          case _: IllegalArgumentException =>
-            FORBIDDEN
-          case _ =>
-            INTERNAL_SERVER_ERROR
-        }
-        val errorResponse = new DefaultHttpResponse(HTTP_1_1, statusCode)
-        errorResponse.setContent(copiedBuffer(error.getStackTraceString, UTF_8))
+      service(request) handle {
+        case error =>
+          val statusCode = error match {
+            case _: IllegalArgumentException => FORBIDDEN
+            case _ => INTERNAL_SERVER_ERROR
+          }
+          val errorResponse = new DefaultHttpResponse(HTTP_1_1, statusCode)
+          errorResponse.setContent(copiedBuffer(error.getStackTraceString, UTF_8))
 
-        errorResponse
+          errorResponse
       }
     }
   }
 
+  /**
+   * A HTTP proxy service.
+   */
   class ProxyHttpClient extends Service[HttpRequest, HttpResponse] {
 
     def apply(request: HttpRequest): Future[HttpResponse] = {
@@ -43,7 +53,7 @@ object MyApp {
       request.setUri(request.getUri().substring("http://".length + host.length))
 
       val target = host.indexOf(":") match {
-        case -1  => host + ":80"
+        case -1 => host + ":80"
         case pos => host + ":" + host.substring(pos + 1)
       }
 
@@ -53,19 +63,42 @@ object MyApp {
         .hostConnectionLimit(1)
         .build()
 
-      client(request) ensure { client.release() }
+      client(request) ensure {
+        client.release()
+      }
     }
   }
 
+  /**
+   * A search engine query data object.
+   *
+   * @param query the full query String.
+   * @param keywords a sequence of keywords from the query string.
+   */
   case class SearchEngineQuery(
-    query: String,
-    keywords: Seq[String]
-  )
-  
+                                query: String,
+                                keywords: Seq[String]
+                                )
+
+  /**
+   * A search engine processor trait. The variance is encapsulated in regular expressions
+   * to be defined in concrete processors.
+   */
   trait SearchEngineProcessor extends PartialFunction[String, SearchEngineQuery] {
 
+    /**
+     * Regular expression to check is a URI corresponds to those a given search engine.
+     */
     def searchEngineTest: Regex
+
+    /**
+     * Regular expression to extract a query string from a URI.
+     */
     def queryExtractor: Regex
+
+    /**
+     * Regular expression to split a query string into keywords.
+     */
     def keywordSplitter: Regex
 
     def isDefinedAt(uri: String) = searchEngineTest.findFirstIn(uri).isDefined
@@ -79,33 +112,43 @@ object MyApp {
   }
 
   class GoogleSearch extends SearchEngineProcessor {
-    val searchEngineTest   = "www.google.*q=.*".r
+    val searchEngineTest = "www.google.*q=.*".r
     val queryExtractor = "q=([^&]*)".r
     val keywordSplitter = "(%20)|(\\+)".r
   }
 
   class BingSearch extends SearchEngineProcessor {
-    val searchEngineTest   = "www.bing.com.*q=.*".r
+    val searchEngineTest = "www.bing.com.*q=.*".r
     val queryExtractor = "q=([^&]*)".r
     val keywordSplitter = "\\+".r
   }
 
   class YahooSearch extends SearchEngineProcessor {
-    val searchEngineTest   = "search.yahoo.com.*p=.*".r
+    val searchEngineTest = "search.yahoo.com.*p=.*".r
     val queryExtractor = "p=([^&]*)".r
     val keywordSplitter = "(%20)|(\\+)".r
   }
 
   class WikipediaSearch extends SearchEngineProcessor {
-    val searchEngineTest   = "wikipedia.org.*search=.*".r
+    val searchEngineTest = "wikipedia.org.*search=.*".r
     val queryExtractor = "search=([^&]*)".r
     val keywordSplitter = "\\+".r
   }
-  
+
+  /**
+   * Search engine filter that intercepts queries and stores them to MongoDB.
+   *
+   * @param processor a function to fetch a search engine query from a URI, usually done
+   *                  by assembling instances of <code>SearchEngineProcessor</code> partial functions
+   *                  using <code>orElse</code>, and using <code>lift</code> on the resulting
+   *                  partial function to obtain a subclass of
+   *                  <code>(String => Option[SearchEngineQuery])</code>.
+   * @param mongodb   the storage facade to MongoDB.
+   */
   class SearchEngineFilter(
-    val processor: String => Option[SearchEngineQuery],
-    val mongodb: MongoDBStore
-  ) extends SimpleFilter[HttpRequest, HttpResponse] {
+                            val processor: String => Option[SearchEngineQuery],
+                            val mongodb: MongoDBStore
+                            ) extends SimpleFilter[HttpRequest, HttpResponse] {
 
     def apply(request: HttpRequest, service: Service[HttpRequest, HttpResponse]) = {
 
@@ -117,18 +160,31 @@ object MyApp {
       service(request)
     }
   }
-  
+
+  /**
+   * A facade to store extracted queries into MongoDB.
+   *
+   * @param host the MongoDB server host.
+   * @param port the MongoDB server port.
+   */
   class MongoDBStore(val host: String = "127.0.0.1", val port: Int = 27017) {
 
     import com.mongodb.casbah.Imports._
     import com.mongodb.casbah.commons.conversions.scala._
+
     RegisterJodaTimeConversionHelpers()
 
-    val connection = MongoConnection(host, port)
-    val db = connection("HttpProxyQueries")
+    private[this] val connection = MongoConnection(host, port)
+    private[this] val db = connection("HttpProxyQueries")
 
     val COLLECTION = "queries"
 
+    /**
+     * Insert a query into MongoDB, adding the current date to the resulting
+     * entry in the underlying MongoDB collection.
+     *
+     * @param query the search engine query object.
+     */
     def insert(query: SearchEngineQuery) {
       val entry = MongoDBObject(
         "when" -> new DateTime(),
@@ -140,6 +196,11 @@ object MyApp {
 
   }
 
+  /**
+   * The good old entry point.
+   *
+   * @param args the good old process arguments.
+   */
   def main(args: Array[String]) {
 
     val handleExceptions = new HandleExceptions
