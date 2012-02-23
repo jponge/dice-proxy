@@ -8,12 +8,15 @@ repositories.remote << 'http://maven.twttr.com/'
 FINAGLE = "com.twitter:finagle-http_#{Scala.version}:jar:1.11.1"
 CASBAH = "com.mongodb.casbah:casbah_2.9.0-1:pom:2.1.5.0"
 
-define 'finagle-test' do    
-  project.group = 'my.app'
-  project.version = '0.1'
+VERSION = '0.1'
+MAIN_CLASS = 'dice.searchengine.httpproxy.SearchEngineHttpProxy'
+
+define 'SearchEngineHttpProxy' do
+  project.group = 'dice.searchengine.httpproxy'
+  project.version = VERSION
   
   package :jar
-  manifest['Main-Class'] = 'dice.searchengine.httpproxy.SearchEngineHttpProxy'
+  manifest['Main-Class'] = MAIN_CLASS
   
   compile.with transitive(FINAGLE), transitive(CASBAH)
 end
@@ -23,5 +26,5 @@ task :execute => :package do
   classpath = all_deps.map { |dep| dep.name }.delete_if { |dep| dep.include? 'scala-library' }.join(':')
   puts "\nRun >>> \n"
   puts "Classpath: #{classpath}\n\n"
-  sh "scala -cp #{classpath}:target/finagle-test-0.1.jar my.app.MyApp"
+  sh "scala -cp #{classpath}:target/SearchEngineHttpProxy-#{VERSION}.jar #{MAIN_CLASS}"
 end
