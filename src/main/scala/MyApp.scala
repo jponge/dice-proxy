@@ -11,6 +11,7 @@ import java.net.InetSocketAddress
 import com.twitter.util.Future
 import scala.util.matching.Regex
 import com.twitter.finagle.http.Http
+import org.joda.time.DateTime
 
 object MyApp {
 
@@ -101,30 +102,58 @@ object MyApp {
     val keywordSplitter = "\\+".r
   }
   
-  class SearchEngineFilter(val processor: String => Option[SearchEngineQuery]) extends SimpleFilter[HttpRequest, HttpResponse] {
+  class SearchEngineFilter(
+    val processor: String => Option[SearchEngineQuery],
+    val mongodb: MongoDBStore
+  ) extends SimpleFilter[HttpRequest, HttpResponse] {
 
     def apply(request: HttpRequest, service: Service[HttpRequest, HttpResponse]) = {
 
       val query = processor(request.getUri())
       if (query.isDefined) {
-        println(query.get)
+        mongodb.insert(query.get)
       }
 
       service(request)
     }
   }
+  
+  class MongoDBStore(val host: String = "127.0.0.1", val port: Int = 27017) {
+
+    import com.mongodb.casbah.Imports._
+    import com.mongodb.casbah.commons.conversions.scala._
+    RegisterJodaTimeConversionHelpers()
+
+    val connection = MongoConnection(host, port)
+    val db = connection("HttpProxyQueries")
+
+    val COLLECTION = "queries"
+
+    def insert(query: SearchEngineQuery) {
+      val entry = MongoDBObject(
+        "when" -> new DateTime(),
+        "query" -> query.query,
+        "keywords" -> query.keywords
+      )
+      db(COLLECTION) += entry
+    }
+
+  }
 
   def main(args: Array[String]) {
+
     val handleExceptions = new HandleExceptions
     val proxyClient = new ProxyHttpClient
-    
+
+    val mongodb = new MongoDBStore()
+
     val google = new GoogleSearch
     val bing = new BingSearch
     val yahoo = new YahooSearch
     val wikipedia = new WikipediaSearch
 
     val searchEngineProcessor = (google orElse bing orElse yahoo orElse wikipedia).lift
-    val searchEngineFilter = new SearchEngineFilter(searchEngineProcessor)
+    val searchEngineFilter = new SearchEngineFilter(searchEngineProcessor, mongodb)
 
     val myService = handleExceptions andThen searchEngineFilter andThen proxyClient
 

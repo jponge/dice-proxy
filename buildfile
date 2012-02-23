@@ -15,8 +15,7 @@ define 'finagle-test' do
   package :jar
   manifest['Main-Class'] = 'my.app.MyApp'
   
-  compile.with transitive(FINAGLE)
-  compile.with transitive(CASBAH)
+  compile.with transitive(FINAGLE), transitive(CASBAH)
 end
 
 task :execute => :package do
