@@ -6,6 +6,7 @@ repositories.remote << 'http://www.ibiblio.org/maven2'
 repositories.remote << 'http://maven.twttr.com/'
 
 FINAGLE = "com.twitter:finagle-http_#{Scala.version}:jar:1.11.1"
+CASBAH = "com.mongodb.casbah:casbah_2.9.0-1:pom:2.1.5.0"
 
 define 'finagle-test' do    
   project.group = 'my.app'
@@ -15,10 +16,13 @@ define 'finagle-test' do
   manifest['Main-Class'] = 'my.app.MyApp'
   
   compile.with transitive(FINAGLE)
+  compile.with transitive(CASBAH)
 end
 
 task :execute => :package do
-  classpath = transitive(FINAGLE).map { |dep| dep.name }.delete_if { |dep| dep.include? 'scala-library' }.join(':')
-  puts "\nRun >>> \n\n"
+  all_deps = transitive(FINAGLE) + transitive(CASBAH)
+  classpath = all_deps.map { |dep| dep.name }.delete_if { |dep| dep.include? 'scala-library' }.join(':')
+  puts "\nRun >>> \n"
+  puts "Classpath: #{classpath}\n\n"
   sh "scala -cp #{classpath}:target/finagle-test-0.1.jar my.app.MyApp"
 end

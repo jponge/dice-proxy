@@ -7,10 +7,10 @@ import org.jboss.netty.handler.codec.http.HttpVersion.HTTP_1_1
 import org.jboss.netty.buffer.ChannelBuffers.copiedBuffer
 import org.jboss.netty.util.CharsetUtil.UTF_8
 import com.twitter.finagle.builder._
-import com.twitter.finagle.http.Http
 import java.net.InetSocketAddress
 import com.twitter.util.Future
 import scala.util.matching.Regex
+import com.twitter.finagle.http.Http
 
 object MyApp {
 
