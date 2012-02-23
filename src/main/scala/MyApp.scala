@@ -1,7 +1,6 @@
 package my.app
 
 import com.twitter.finagle.{Service, SimpleFilter}
-import my.app.MyApp.WikipediaSearchFilter
 import org.jboss.netty.handler.codec.http._
 import org.jboss.netty.handler.codec.http.HttpResponseStatus._
 import org.jboss.netty.handler.codec.http.HttpVersion.HTTP_1_1
@@ -56,69 +55,78 @@ object MyApp {
       client(request) ensure { client.release() }
     }
   }
+
+  case class SearchEngineQuery(
+    query: String,
+    keywords: Seq[String]
+  )
   
-  trait SearchEngineFilter extends SimpleFilter[HttpRequest, HttpResponse] {
+  trait SearchEngineProcessor extends PartialFunction[String, SearchEngineQuery] {
 
     def searchEngineTest: Regex
     def queryExtractor: Regex
     def keywordSplitter: Regex
 
-    def apply(request: HttpRequest, service: Service[HttpRequest, HttpResponse]) = {
+    def isDefinedAt(uri: String) = searchEngineTest.findFirstIn(uri).isDefined
 
-      val uri = request.getUri()
-      if (searchEngineTest.findFirstIn(uri).isDefined) {
-        val query = queryExtractor.findFirstMatchIn(uri).get.group(1)
-        val keywords = keywordSplitter.split(query)
-        println(keywords.reduce { _ + ", " + _ })
-      }
+    def apply(uri: String): SearchEngineQuery = {
+      val query = queryExtractor.findFirstMatchIn(uri).get.group(1)
+      val keywords = keywordSplitter.split(query)
 
-      service(request)
+      SearchEngineQuery(query, keywords)
     }
   }
-  
-  class GoogleSearchFilter extends SearchEngineFilter {
 
+  class GoogleSearch extends SearchEngineProcessor {
     val searchEngineTest   = "www.google.*q=.*".r
     val queryExtractor = "q=([^&]*)".r
     val keywordSplitter = "(%20)|(\\+)".r
   }
 
-  class BingSearchFilter extends SearchEngineFilter {
-
+  class BingSearch extends SearchEngineProcessor {
     val searchEngineTest   = "www.bing.com.*q=.*".r
     val queryExtractor = "q=([^&]*)".r
     val keywordSplitter = "\\+".r
   }
-  
-  class YahooSearchFilter extends SearchEngineFilter {
 
+  class YahooSearch extends SearchEngineProcessor {
     val searchEngineTest   = "search.yahoo.com.*p=.*".r
     val queryExtractor = "p=([^&]*)".r
     val keywordSplitter = "(%20)|(\\+)".r
   }
 
-  class WikipediaSearchFilter extends SearchEngineFilter {
-
+  class WikipediaSearch extends SearchEngineProcessor {
     val searchEngineTest   = "wikipedia.org.*search=.*".r
     val queryExtractor = "search=([^&]*)".r
     val keywordSplitter = "\\+".r
+  }
+  
+  class SearchEngineFilter(val processor: String => Option[SearchEngineQuery]) extends SimpleFilter[HttpRequest, HttpResponse] {
+
+    def apply(request: HttpRequest, service: Service[HttpRequest, HttpResponse]) = {
+
+      val query = processor(request.getUri())
+      if (query.isDefined) {
+        println(query.get)
+      }
+
+      service(request)
+    }
   }
 
   def main(args: Array[String]) {
     val handleExceptions = new HandleExceptions
     val proxyClient = new ProxyHttpClient
-    val googleFilter = new GoogleSearchFilter
-    val bingFilter = new BingSearchFilter
-    val yahooFilter = new YahooSearchFilter
-    val wikipediaFilter = new WikipediaSearchFilter
+    
+    val google = new GoogleSearch
+    val bing = new BingSearch
+    val yahoo = new YahooSearch
+    val wikipedia = new WikipediaSearch
 
-    val myService =
-      handleExceptions andThen
-      googleFilter     andThen
-      bingFilter       andThen
-      yahooFilter      andThen
-      wikipediaFilter  andThen
-      proxyClient
+    val searchEngineProcessor = (google orElse bing orElse yahoo orElse wikipedia).lift
+    val searchEngineFilter = new SearchEngineFilter(searchEngineProcessor)
+
+    val myService = handleExceptions andThen searchEngineFilter andThen proxyClient
 
     val server: Server = ServerBuilder()
       .codec(Http())
