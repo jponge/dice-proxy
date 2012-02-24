@@ -12,6 +12,7 @@ import com.twitter.util.Future
 import scala.util.matching.Regex
 import org.joda.time.DateTime
 import com.twitter.finagle.http.{Response, Request, RichHttp, Http}
+import com.twitter.conversions.time._
 
 /**
  * A HTTP Proxy server based on Twitter Finagle that detects common search
@@ -30,6 +31,7 @@ object SearchEngineHttpProxy {
 
       service(request) handle {
         case error =>
+          println("Could not serve a request: " + error)
           val statusCode = error match {
             case _: IllegalArgumentException => FORBIDDEN
             case _ => INTERNAL_SERVER_ERROR
@@ -60,6 +62,8 @@ object SearchEngineHttpProxy {
       val client = ClientBuilder()
         .codec(Http())
         .hosts(target)
+        .timeout(30.seconds)
+        .tcpConnectTimeout(30.seconds)
         .hostConnectionLimit(1)
         .build()
 
@@ -223,6 +227,8 @@ object SearchEngineHttpProxy {
       .codec(RichHttp[Request](Http()))
       .bindTo(new InetSocketAddress(8080))
       .name("proxy")
+      .readTimeout(30.seconds)
+      .requestTimeout(30.seconds)
       .build(myService)
   }
 }
