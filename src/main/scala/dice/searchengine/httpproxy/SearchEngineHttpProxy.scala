@@ -80,7 +80,8 @@ object SearchEngineHttpProxy {
    */
   case class SearchEngineQuery(
     query: String,
-    keywords: Seq[String]
+    keywords: Seq[String],
+    source: String
   )
 
   /**
@@ -104,13 +105,18 @@ object SearchEngineHttpProxy {
      */
     def keywordSplitter: Regex
 
+    /**
+     * Symbolic name for the search engine.
+     */
+    def name: String
+
     def isDefinedAt(uri: String) = searchEngineTest.findFirstIn(uri).isDefined
 
     def apply(uri: String): SearchEngineQuery = {
       val query = queryExtractor.findFirstMatchIn(uri).get.group(1)
       val keywords = keywordSplitter.split(query)
 
-      SearchEngineQuery(query, keywords)
+      SearchEngineQuery(query, keywords, name)
     }
   }
 
@@ -118,24 +124,28 @@ object SearchEngineHttpProxy {
     val searchEngineTest = "www.google.*q=.*".r
     val queryExtractor = "q=([^&]*)".r
     val keywordSplitter = "(%20)|(\\+)".r
+    val name = "google"
   }
 
   class BingSearch extends SearchEngineProcessor {
     val searchEngineTest = "www.bing.com.*q=.*".r
     val queryExtractor = "q=([^&]*)".r
     val keywordSplitter = "\\+".r
+    val name = "bing"
   }
 
   class YahooSearch extends SearchEngineProcessor {
     val searchEngineTest = "search.yahoo.com.*p=.*".r
     val queryExtractor = "p=([^&]*)".r
     val keywordSplitter = "(%20)|(\\+)".r
+    val name = "yahoo"
   }
 
   class WikipediaSearch extends SearchEngineProcessor {
     val searchEngineTest = "wikipedia.org.*search=.*".r
     val queryExtractor = "search=([^&]*)".r
     val keywordSplitter = "\\+".r
+    val name = "wikipedia"
   }
 
   /**
@@ -192,6 +202,7 @@ object SearchEngineHttpProxy {
       val entry = MongoDBObject(
         "when" -> new DateTime(),
         "query" -> query.query,
+        "source" -> query.source,
         "keywords" -> query.keywords,
         "ip" -> request.remoteHost,
         "user-agent" -> request.userAgent.getOrElse("undefined")

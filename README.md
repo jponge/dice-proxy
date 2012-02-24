@@ -88,6 +88,11 @@ A search engine is defined as a partial function through the following trait:
        * Regular expression to split a query string into keywords.
        */
       def keywordSplitter: Regex
+      
+      /**
+       * Symbolic name for the search engine.
+       */
+      def name: String
     
       def isDefinedAt(uri: String) = searchEngineTest.findFirstIn(uri).isDefined
     
@@ -105,6 +110,7 @@ The variance is captured by regular expressions. For example here is how Google 
       val searchEngineTest = "www.google.*q=.*".r
       val queryExtractor = "q=([^&]*)".r
       val keywordSplitter = "(%20)|(\\+)".r
+      val name = "google"
     }
 
 Processors can then be elegantly chained as partial functions, then lifted to form a single function returning an optional type, such as in:
@@ -119,7 +125,8 @@ Thus:
     searchEngineProcessor("http://www.google.com/?q=les+muscles+merguez+party")
     => Some(SearchEngineQuery(
         "les+muscles+merguez+party",
-        Seq("les", "muscles", "merguez", "party")
+        Seq("les", "muscles", "merguez", "party"),
+        "google"
        ))
 
 ## Why *xyz*?
