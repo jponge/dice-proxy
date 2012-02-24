@@ -74,7 +74,10 @@ object SearchEngineHttpProxy {
    * @param query the full query String.
    * @param keywords a sequence of keywords from the query string.
    */
-  case class SearchEngineQuery(query: String, keywords: Seq[String])
+  case class SearchEngineQuery(
+    query: String,
+    keywords: Seq[String]
+  )
 
   /**
    * A search engine processor trait. The variance is encapsulated in regular expressions
@@ -150,7 +153,7 @@ object SearchEngineHttpProxy {
 
       val query = processor(request.getUri())
       if (query.isDefined) {
-        mongodb.insert(query.get)
+        mongodb.insert(query.get, request)
       }
 
       service(request)
@@ -181,11 +184,13 @@ object SearchEngineHttpProxy {
      *
      * @param query the search engine query object.
      */
-    def insert(query: SearchEngineQuery) {
+    def insert(query: SearchEngineQuery, request: Request) {
       val entry = MongoDBObject(
         "when" -> new DateTime(),
         "query" -> query.query,
-        "keywords" -> query.keywords
+        "keywords" -> query.keywords,
+        "ip" -> request.remoteHost,
+        "user-agent" -> request.userAgent.getOrElse("undefined")
       )
       db(COLLECTION) += entry
     }
