@@ -10,8 +10,8 @@ import com.twitter.finagle.builder._
 import java.net.InetSocketAddress
 import com.twitter.util.Future
 import scala.util.matching.Regex
-import com.twitter.finagle.http.Http
 import org.joda.time.DateTime
+import com.twitter.finagle.http.{Response, Request, RichHttp, Http}
 
 /**
  * A HTTP Proxy server based on Twitter Finagle that detects common search
@@ -24,9 +24,9 @@ object SearchEngineHttpProxy {
   /**
    * A filter for handling exceptions.
    */
-  class HandleExceptions extends SimpleFilter[HttpRequest, HttpResponse] {
+  class HandleExceptions extends SimpleFilter[Request, Response] {
 
-    def apply(request: HttpRequest, service: Service[HttpRequest, HttpResponse]) = {
+    def apply(request: Request, service: Service[Request, Response]) = {
 
       service(request) handle {
         case error =>
@@ -37,7 +37,7 @@ object SearchEngineHttpProxy {
           val errorResponse = new DefaultHttpResponse(HTTP_1_1, statusCode)
           errorResponse.setContent(copiedBuffer(error.getStackTraceString, UTF_8))
 
-          errorResponse
+          Response(errorResponse)
       }
     }
   }
@@ -45,9 +45,9 @@ object SearchEngineHttpProxy {
   /**
    * A HTTP proxy service.
    */
-  class ProxyHttpClient extends Service[HttpRequest, HttpResponse] {
+  class ProxyHttpClient extends Service[Request, Response] {
 
-    def apply(request: HttpRequest): Future[HttpResponse] = {
+    def apply(request: Request): Future[Response] = {
 
       val host = request.getHeader("Host")
       request.setUri(request.getUri().substring("http://".length + host.length))
@@ -63,9 +63,8 @@ object SearchEngineHttpProxy {
         .hostConnectionLimit(1)
         .build()
 
-      client(request) ensure {
-        client.release()
-      }
+      val requestFuture = client(request.httpRequest) ensure { client.release() }
+      Future.value(Response(requestFuture.get()))
     }
   }
 
@@ -75,10 +74,7 @@ object SearchEngineHttpProxy {
    * @param query the full query String.
    * @param keywords a sequence of keywords from the query string.
    */
-  case class SearchEngineQuery(
-                                query: String,
-                                keywords: Seq[String]
-                                )
+  case class SearchEngineQuery(query: String, keywords: Seq[String])
 
   /**
    * A search engine processor trait. The variance is encapsulated in regular expressions
@@ -146,11 +142,11 @@ object SearchEngineHttpProxy {
    * @param mongodb   the storage facade to MongoDB.
    */
   class SearchEngineFilter(
-                            val processor: String => Option[SearchEngineQuery],
-                            val mongodb: MongoDBStore
-                            ) extends SimpleFilter[HttpRequest, HttpResponse] {
+    val processor: String => Option[SearchEngineQuery],
+    val mongodb: MongoDBStore
+  ) extends SimpleFilter[Request, Response] {
 
-    def apply(request: HttpRequest, service: Service[HttpRequest, HttpResponse]) = {
+    def apply(request: Request, service: Service[Request, Response]) = {
 
       val query = processor(request.getUri())
       if (query.isDefined) {
@@ -219,7 +215,7 @@ object SearchEngineHttpProxy {
     val myService = handleExceptions andThen searchEngineFilter andThen proxyClient
 
     val server: Server = ServerBuilder()
-      .codec(Http())
+      .codec(RichHttp[Request](Http()))
       .bindTo(new InetSocketAddress(8080))
       .name("proxy")
       .build(myService)
