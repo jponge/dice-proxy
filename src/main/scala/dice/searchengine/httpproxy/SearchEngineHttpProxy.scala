@@ -13,6 +13,7 @@ import scala.util.matching.Regex
 import org.joda.time.DateTime
 import com.twitter.finagle.http.{Response, Request, RichHttp, Http}
 import com.twitter.conversions.time._
+import com.mongodb.casbah.MongoDB
 
 /**
  * A HTTP Proxy server based on Twitter Finagle that detects common search
@@ -180,7 +181,7 @@ object SearchEngineHttpProxy {
    * @param host the MongoDB server host.
    * @param port the MongoDB server port.
    */
-  class MongoDBStore(val host: String = "127.0.0.1", val port: Int = 27017) {
+  class MongoDBStore(val anonymize: Boolean = true, val host: String = "127.0.0.1", val port: Int = 27017) {
 
     import com.mongodb.casbah.Imports._
     import com.mongodb.casbah.commons.conversions.scala._
@@ -199,15 +200,19 @@ object SearchEngineHttpProxy {
      * @param query the search engine query object.
      */
     def insert(query: SearchEngineQuery, request: Request) {
-      val entry = MongoDBObject(
-        "when" -> new DateTime(),
-        "query" -> query.query,
-        "source" -> query.source,
-        "keywords" -> query.keywords,
-        "ip" -> request.remoteHost,
-        "user-agent" -> request.userAgent.getOrElse("undefined")
-      )
-      db(COLLECTION) += entry
+
+      val builder = MongoDBObject.newBuilder
+      builder += "when" -> new DateTime()
+      builder += "query" -> query.query
+      builder += "source" -> query.source
+      builder += "keywords" -> query.keywords
+
+      if (!anonymize) {
+        builder += "user-agent" -> request.userAgent.getOrElse("undefined")
+        builder += "ip" -> request.remoteHost
+      }
+
+      db(COLLECTION) += builder.result()
     }
 
   }
