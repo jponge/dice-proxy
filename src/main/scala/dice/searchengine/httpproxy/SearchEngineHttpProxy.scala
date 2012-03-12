@@ -216,6 +216,31 @@ object SearchEngineHttpProxy {
     }
 
   }
+  
+  /**
+   * MongoDBStore companion object.
+   */
+  object MongoDBStore {
+    
+    /**
+     * Factory method to build a MongoDBStore object from command-line arguments.
+     *
+     * There are 3 arguments: a boolean to indicate if the stored data must be anonymized
+     * or not, a string for the MongoDB host address, and an integer to specify the TCP
+     * port number of the MongoDB server.
+     * 
+     * With no arguments the defaults are: { true, 127.0.0.1, 27017 }.
+     *
+     * @param args the command-line arguments
+     * @return the store instance
+     * @throws IllegalArgumentException if the arguments do not match
+     */
+    def apply(args: Array[String]): MongoDBStore = args.length match {
+      case 0 => new MongoDBStore()
+      case 3 => new MongoDBStore(args(0).toBoolean, args(1), args(2).toInt)
+      case _ => throw new IllegalArgumentException("Arguments must be: anonymize? (boolean), mongodb_host (string), mongodb_port (int)")
+    }
+  }  
 
   /**
    * The good old entry point.
@@ -227,7 +252,7 @@ object SearchEngineHttpProxy {
     val handleExceptions = new HandleExceptions
     val proxyClient = new ProxyHttpClient
 
-    val mongodb = new MongoDBStore()
+    val mongodb = MongoDBStore(args)
 
     val google = new GoogleSearch
     val bing = new BingSearch
