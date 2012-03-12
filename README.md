@@ -60,6 +60,7 @@ Alternatively you may assemble a classpath from the dependencies being put in th
 
 You will also need a working MongoDB instance. In development mode, I suggest that you use it with the provided configuration file called `mongod.conf`:
 
+    mkdir db-mongodb
     mongod run --config=mongod.conf
 
 You can tweak the MongoDB configuration as you want to add replication and sharding support. This is all transparent to the HTTP proxy application, and you can even start a cluster of those!
