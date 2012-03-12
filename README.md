@@ -83,7 +83,7 @@ You can tweak the MongoDB configuration as you want to add replication and shard
 
 ## Use it with a web browser
 
-If you don't know how to configure a proxy for your web server then Google is your friend.
+If you don't know how to configure a proxy for your web browser then Google is your friend.
 
 ## Recognizing new search engines
 
