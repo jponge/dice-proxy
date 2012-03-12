@@ -89,62 +89,70 @@ If you don't know how to configure a proxy for your web server then Google is yo
 
 A search engine is defined as a partial function through the following trait:
 
-    trait SearchEngineProcessor extends PartialFunction[String, SearchEngineQuery] {
-    
-      /**
-       * Regular expression to check is a URI corresponds to those a given search engine.
-       */
-      def searchEngineTest: Regex
-    
-      /**
-       * Regular expression to extract a query string from a URI.
-       */
-      def queryExtractor: Regex
-    
-      /**
-       * Regular expression to split a query string into keywords.
-       */
-      def keywordSplitter: Regex
-      
-      /**
-       * Symbolic name for the search engine.
-       */
-      def name: String
-    
-      def isDefinedAt(uri: String) = searchEngineTest.findFirstIn(uri).isDefined
-    
-      def apply(uri: String): SearchEngineQuery = {
-        val query = queryExtractor.findFirstMatchIn(uri).get.group(1)
-        val keywords = keywordSplitter.split(query)
-    
-        SearchEngineQuery(query, keywords)
-      }
-    }
+```scala
+trait SearchEngineProcessor extends PartialFunction[String, SearchEngineQuery] {
+
+  /**
+   * Regular expression to check is a URI corresponds to those a given search engine.
+   */
+  def searchEngineTest: Regex
+
+  /**
+   * Regular expression to extract a query string from a URI.
+   */
+  def queryExtractor: Regex
+
+  /**
+   * Regular expression to split a query string into keywords.
+   */
+  def keywordSplitter: Regex
+  
+  /**
+   * Symbolic name for the search engine.
+   */
+  def name: String
+
+  def isDefinedAt(uri: String) = searchEngineTest.findFirstIn(uri).isDefined
+
+  def apply(uri: String): SearchEngineQuery = {
+    val query = queryExtractor.findFirstMatchIn(uri).get.group(1)
+    val keywords = keywordSplitter.split(query)
+
+    SearchEngineQuery(query, keywords)
+  }
+}
+```
 
 The variance is captured by regular expressions. For example here is how Google queries can be captured:
 
-    class GoogleSearch extends SearchEngineProcessor {
-      val searchEngineTest = "www.google.*q=.*".r
-      val queryExtractor = "q=([^&]*)".r
-      val keywordSplitter = "(%20)|(\\+)".r
-      val name = "google"
-    }
+```scala
+class GoogleSearch extends SearchEngineProcessor {
+  val searchEngineTest = "www.google.*q=.*".r
+  val queryExtractor = "q=([^&]*)".r
+  val keywordSplitter = "(%20)|(\\+)".r
+  val name = "google"
+}
+```
 
 Processors can then be elegantly chained as partial functions, then lifted to form a single function returning an optional type, such as in:
 
-    val searchEngineProcessor = (google orElse bing orElse yahoo orElse wikipedia).lift
+```scala
+val searchEngineProcessor = (google orElse bing orElse yahoo orElse wikipedia).lift
+```
 
 Thus:
 
-    searchEngineProcessor("http://www.autosport.com/")
-    => None
-    
-    searchEngineProcessor("http://www.google.com/?q=les+muscles+merguez+party")
-    => Some(SearchEngineQuery(
-        "les+muscles+merguez+party",
-        Seq("les", "muscles", "merguez", "party"),
-        "google"
-       ))
+```scala
+searchEngineProcessor("http://www.autosport.com/")
+=> None
+
+searchEngineProcessor("http://www.google.com/?q=les+muscles+merguez+party")
+=> Some(SearchEngineQuery(
+     "les+muscles+merguez+party",
+     Seq("les", "muscles", "merguez", "party"),
+     "google"
+   ))
+```
 
 ## Why *xyz*?
 
