@@ -2,3 +2,4 @@ target
 *.iws
 dice-proxy
 dice-proxy.zip
+db-mongodb/
